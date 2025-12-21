@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "clients/rust",
+    # "clients/rust", # excluded - conflicts
     "interface",
-    "program",
+    # "program", # excluded - conflicts
 ]
 
 [workspace.package]
@@ -31,3 +31,22 @@ test = "nightly-2025-02-16"
 
 [workspace.metadata.spellcheck]
 config = "scripts/spellcheck.toml"
+
+[workspace.dependencies]
+solana-account = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-borsh = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-clock = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-cpi = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-frozen-abi = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-frozen-abi-macro = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-instruction = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-program-error = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-pubkey = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-sdk-ids = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-system-interface = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-sysvar = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+solana-sysvar-id = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+
+[patch.crates-io]
+jupnet-signature = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
+jupnet-signer = { git = "https://github.com/jupnet/jupnet-sdk", branch = "fix/sdk-deps" }
