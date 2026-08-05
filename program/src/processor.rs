@@ -20,25 +20,60 @@ use {
     },
     solana_sysvar::{epoch_rewards::EpochRewards, Sysvar},
     solana_sysvar_id::SysvarId,
-    solana_vote_interface::{program as solana_vote_program, state::VoteStateV4},
-    std::{collections::HashSet, mem::MaybeUninit},
+    solana_vote_interface::program as solana_vote_program,
+    std::collections::HashSet,
 };
 
-fn get_vote_state(vote_account_info: &AccountInfo) -> Result<Box<VoteStateV4>, ProgramError> {
+/// The only part of an apex vote/quorum account the stake program consumes:
+/// the `epoch_credits` history. Apex accounts are the apex-native `QuorumAccount`
+/// (crate `apex-quorum-validation-interface`), whose wire is
+/// `[version u32 LE][bincode body]` with `epoch_credits` as the FIRST body field.
+/// We decode only that version-agnostic prefix (ignoring the version value and
+/// everything after the vec), so this program never needs rebuilding when the
+/// account gains fields. This layout must stay in lockstep with
+/// `QuorumAccount::deserialize_epoch_credits_prefix`.
+struct QuorumEpochCredits {
+    epoch_credits: Vec<(u64, u64, u64)>,
+}
+
+impl QuorumEpochCredits {
+    fn credits(&self) -> u64 {
+        self.epoch_credits.last().map_or(0, |(_, credits, _)| *credits)
+    }
+}
+
+fn get_vote_state(vote_account_info: &AccountInfo) -> Result<QuorumEpochCredits, ProgramError> {
     if *vote_account_info.owner != solana_vote_program::id() {
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    let mut vote_state = Box::new(MaybeUninit::uninit());
-    VoteStateV4::deserialize_into_uninit(
-        &vote_account_info.try_borrow_data()?,
-        vote_state.as_mut(),
-        vote_account_info.key,
-    )
-    .map_err(|_| ProgramError::InvalidAccountData)?;
-    let vote_state = unsafe { vote_state.assume_init() };
+    let data = vote_account_info.try_borrow_data()?;
+    // 4-byte version discriminant, then a bincode `Vec<(Epoch,u64,u64)>`:
+    // an 8-byte little-endian length followed by that many 24-byte triples.
+    const HEADER: usize = 4 + 8;
+    if data.len() < HEADER {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    let len = u64::from_le_bytes(data[4..12].try_into().unwrap()) as usize;
+    // Cap the pre-allocation (a bogus length can't force a huge alloc; the loop
+    // still bounds-checks against the actual buffer).
+    let mut epoch_credits = Vec::with_capacity(len.min(64));
+    let mut offset = HEADER;
+    for _ in 0..len {
+        let end = offset
+            .checked_add(24)
+            .ok_or(ProgramError::InvalidAccountData)?;
+        let triple = data
+            .get(offset..end)
+            .ok_or(ProgramError::InvalidAccountData)?;
+        let epoch = u64::from_le_bytes(triple[0..8].try_into().unwrap());
+        let credits = u64::from_le_bytes(triple[8..16].try_into().unwrap());
+        let prev_credits = u64::from_le_bytes(triple[16..24].try_into().unwrap());
+        epoch_credits.push((epoch, credits, prev_credits));
+        offset = end;
+    }
 
-    Ok(vote_state)
+    Ok(QuorumEpochCredits { epoch_credits })
 }
 
 fn get_stake_state(stake_account_info: &AccountInfo) -> Result<StakeStateV2, ProgramError> {
